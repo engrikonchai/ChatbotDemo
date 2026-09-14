@@ -1,11 +1,6 @@
 # Roadmap
 
-Phase 1 (this repository) is a fully self-contained demo: no AI API, no
-database, no authentication. It exists to prove the product concept and the
-interface. The phases below describe how it grows up — each one should be
-possible without rebuilding the phases before it.
-
-## Phase 1 — Demo product (current)
+## Phase 1 — Demo product ✅ complete
 
 - Deterministic, keyword-based mock chat service (`lib/chat/mock-chat-service.ts`)
 - Static business knowledge (`lib/chat/knowledge.ts`)
@@ -14,15 +9,45 @@ possible without rebuilding the phases before it.
 - LocalStorage-backed leads, conversations and settings
 - Demo owner dashboard, no authentication
 
-## Phase 2 — Supabase & owner authentication
+## Phase 2 — Supabase & owner authentication ✅ complete
 
-- Replace the LocalStorage layer (`lib/storage/*`) with Supabase tables for
-  leads, conversations and settings, behind the same function signatures
-  where practical, so components don't need to change.
-- Add owner authentication (Supabase Auth) in front of `/dashboard`.
-- Add row-level security so each apartment owner only sees their own data.
-- Make the "Apartment information" panel editable, writing back to the
-  business-knowledge table instead of the static `knowledge.ts` file.
+*(marked complete after lint, typecheck, unit tests and a production build
+all passed — see README.md → "Testing" and "Phase 2 setup" for how to
+verify this yourself against a real Supabase project.)*
+
+- Supabase Postgres schema (`supabase/migrations/`): `profiles`,
+  `businesses`, `knowledge_items`, `conversations`, `messages`, `leads`,
+  `handoffs`, `widget_settings` — with check constraints, indexes, and Row
+  Level Security on every table.
+- Idempotent owner onboarding via a database trigger on `auth.users`:
+  profile + first business + seeded knowledge + default widget settings,
+  atomically, safe against duplicate firing.
+- Real email/password authentication: `/login`, `/signup`,
+  `/forgot-password`, `/reset-password`, `/auth/callback`, sign-out —
+  protected by both an optimistic Proxy redirect and a real server-side
+  session check in `app/dashboard/layout.tsx`.
+- The public chat widget now persists through secure, rate-limited,
+  Zod-validated server routes (`/api/widget/session|message|lead|handoff`)
+  that resolve tenancy from a public, non-secret `public_widget_id` —
+  never a client-supplied `business_id` — and write via the service-role
+  key, which is never reachable from a client bundle (enforced by the
+  `server-only` guard and a `postbuild` script).
+- The mock chat engine itself (intents, knowledge, booking/hand-off flows,
+  never-invent guardrails) is **unchanged** — it now executes inside those
+  server routes instead of the browser, so a visitor can't fabricate what
+  "the assistant" said.
+- Owner dashboard connected end-to-end to Supabase, scoped by Row Level
+  Security through the owner's own session (not the service-role key):
+  leads, conversations (with human take-over/close controls), hand-offs,
+  editable knowledge, editable widget title/welcome messages/languages,
+  and Supabase-backed demo controls.
+- LocalStorage demoted to visitor-only bookkeeping (an anonymous visitor id
+  + current conversation id), with a dev-only "reset visitor session"
+  control.
+
+See README.md → "Known limitations" for what was deliberately deferred
+(knowledge-edit reconciliation with the live engine, in-memory rate
+limiting, widget re-theming) rather than rushed into this phase.
 
 ## Phase 3 — Real AI API
 
@@ -36,18 +61,26 @@ possible without rebuilding the phases before it.
 - Feed the model prepared knowledge as context/tools rather than letting it
   answer freely, and keep the deterministic booking/hand-off flows as a
   structured fallback for the steps that must not be improvised.
+- Reconcile `knowledge_items` (now editable in the dashboard, per Phase 2)
+  with what the assistant actually answers from, so an owner's edits take
+  effect live.
 
 ## Phase 4 — Embeddable external widget
 
 - Package the chat widget as a standalone embeddable script/iframe so it can
   be dropped into a host's existing website (Wix, Squarespace, custom HTML)
   with a single `<script>` tag, similar to Intercom/Crisp-style widgets.
-- Add a per-apartment configuration (widget key, brand colours, language
-  defaults) resolved server-side.
+- Replace the Phase 2 build-time `NEXT_PUBLIC_WIDGET_ID` with per-embed
+  configuration resolved at runtime.
+- Add a per-apartment configuration (brand colours, language defaults)
+  resolved server-side, finally putting `widget_settings.primary_color`
+  and `position` to use.
 
 ## Phase 5 — WhatsApp & Instagram integrations
 
 - Route the same `ChatService` behind WhatsApp Business API and Instagram
   DM webhooks, so guests can start the same conversation (and the same
   booking/hand-off flows) from the channels they already use.
+- `conversations.channel` and `leads.source` already model this (`website`
+  / `instagram` / `whatsapp`) — Phase 5 is mainly the webhook plumbing.
 - Unify leads and conversations from every channel into the same dashboard.

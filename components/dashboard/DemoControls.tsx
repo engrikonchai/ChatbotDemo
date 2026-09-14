@@ -22,7 +22,7 @@ export function DemoControls({ onReset, onCreateSample }: DemoControlsProps) {
       <button
         type="button"
         onClick={() => {
-          if (window.confirm("Reset all demo data? This clears leads, conversations and settings stored on this device.")) {
+          if (window.confirm("Reset all demo data? This permanently deletes every conversation, lead and hand-off for your business in Supabase.")) {
             onReset();
           }
         }}

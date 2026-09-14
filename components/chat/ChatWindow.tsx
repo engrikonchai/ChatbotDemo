@@ -21,6 +21,8 @@ interface ChatWindowProps {
   mode?: "dialog" | "panel";
   titleId?: string;
   className?: string;
+  /** Owner-editable assistant name (Supabase widget_settings.title). Falls back to the translated default. */
+  title?: string;
 }
 
 export function ChatWindow({
@@ -35,6 +37,7 @@ export function ChatWindow({
   mode = "dialog",
   titleId = "adria-chat-title",
   className,
+  title,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -82,7 +85,7 @@ export function ChatWindow({
           </span>
           <div className="min-w-0">
             <p id={titleId} className="truncate text-sm font-semibold text-white">
-              {text.assistantName}
+              {title || text.assistantName}
             </p>
             <p className="flex items-center gap-1.5 truncate text-xs text-white/60">
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" aria-hidden="true" />

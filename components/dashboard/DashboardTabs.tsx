@@ -6,6 +6,7 @@ export type DashboardTab =
   | "overview"
   | "leads"
   | "conversations"
+  | "handoffs"
   | "apartment"
   | "widget"
   | "settings";
@@ -14,6 +15,7 @@ const TABS: { id: DashboardTab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "leads", label: "Leads" },
   { id: "conversations", label: "Conversations" },
+  { id: "handoffs", label: "Hand-offs" },
   { id: "apartment", label: "Apartment info" },
   { id: "widget", label: "Widget preview" },
   { id: "settings", label: "Settings" },

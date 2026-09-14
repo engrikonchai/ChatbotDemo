@@ -1,8 +1,8 @@
 import { Handshake, MessageSquareText, TrendingUp, UserPlus } from "lucide-react";
 import { Card } from "@/components/ui/Card";
-import type { Lead, StoredConversation } from "@/lib/storage/types";
+import type { ConversationRow, HandoffRow, LeadRow } from "@/lib/supabase/database.types";
 
-function conversionRate(leads: Lead[], conversations: StoredConversation[]): number {
+function conversionRate(leads: LeadRow[], conversations: ConversationRow[]): number {
   if (conversations.length === 0) return 0;
   return Math.round((leads.length / conversations.length) * 100);
 }
@@ -10,9 +10,11 @@ function conversionRate(leads: Lead[], conversations: StoredConversation[]): num
 export function OverviewPanel({
   leads,
   conversations,
+  handoffs,
 }: {
-  leads: Lead[];
-  conversations: StoredConversation[];
+  leads: LeadRow[];
+  conversations: ConversationRow[];
+  handoffs: HandoffRow[];
 }) {
   const metrics = [
     {
@@ -25,7 +27,7 @@ export function OverviewPanel({
       icon: MessageSquareText,
       label: "Total conversations",
       value: conversations.length,
-      hint: "stored on this device",
+      hint: "stored in Supabase",
     },
     {
       icon: TrendingUp,
@@ -36,7 +38,7 @@ export function OverviewPanel({
     {
       icon: Handshake,
       label: "Human hand-offs",
-      value: leads.filter((lead) => lead.source === "handoff").length,
+      value: handoffs.length,
       hint: "sent to the host directly",
     },
   ];

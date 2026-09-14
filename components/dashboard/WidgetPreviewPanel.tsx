@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Info } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { mockChatService } from "@/lib/chat/mock-chat-service";
 import type { ChatMessage, ConversationState } from "@/lib/chat/types";
-import { getLeads } from "@/lib/storage/leads";
 
 /**
  * A live, fully-functional preview of the chat widget — but ephemeral:
@@ -21,6 +20,9 @@ export function WidgetPreviewPanel() {
   );
   const [isLoading, setIsLoading] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[] | undefined>(undefined);
+  // Ephemeral preview, never touches Supabase — just needs *a* sequence
+  // number so the mock engine can format a reference in its reply text.
+  const leadSequenceRef = useRef(1);
 
   const handleSend = useCallback(
     async (rawText: string) => {
@@ -42,8 +44,9 @@ export function WidgetPreviewPanel() {
           message: text,
           state: convoState,
           history: messages,
-          nextLeadSequence: getLeads().length + 1,
+          nextLeadSequence: leadSequenceRef.current,
         });
+        if (result.leadDraft) leadSequenceRef.current += 1;
         setMessages((prev) => [...prev, ...result.messages]);
         setConvoState(result.state);
         setQuickReplies(result.suggestedReplies);

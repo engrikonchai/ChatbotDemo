@@ -1,0 +1,57 @@
+/**
+ * Central place that reads Supabase environment variables. Never throws
+ * at module load time (that would break the build and the public
+ * landing page when Supabase isn't configured yet) — callers decide how
+ * to react to a missing configuration.
+ */
+
+export interface PublicSupabaseEnv {
+  url: string;
+  anonKey: string;
+}
+
+export function getPublicSupabaseEnv(): PublicSupabaseEnv | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey) return null;
+  return { url, anonKey };
+}
+
+/** True once the two public Supabase variables are present. */
+export function isSupabaseConfigured(): boolean {
+  return getPublicSupabaseEnv() !== null;
+}
+
+/**
+ * The demo `businesses.public_widget_id` the public landing page's chat
+ * widget talks to. Not one of the three variables named in the Phase 2
+ * brief — added because this is a single-tenant demo: the landing page
+ * needs to know *which* business's widget to render, and a business's
+ * `public_widget_id` is only generated once its owner has signed up
+ * (see the onboarding trigger in supabase/migrations). Find it on the
+ * dashboard's Settings tab after your first sign-up and put it in
+ * .env.local as NEXT_PUBLIC_WIDGET_ID. Phase 4 (embeddable widget)
+ * replaces this with per-embed configuration instead of a build-time
+ * environment variable.
+ */
+export function getPublicWidgetId(): string | null {
+  return process.env.NEXT_PUBLIC_WIDGET_ID || null;
+}
+
+/** True once Supabase is configured AND a demo business widget id is set. */
+export function isWidgetConfigured(): boolean {
+  return isSupabaseConfigured() && getPublicWidgetId() !== null;
+}
+
+/**
+ * A safe, non-sensitive message for developer-facing UI when Supabase
+ * isn't configured. Never shown to a real site visitor in production —
+ * see `lib/supabase/env.ts` usage in `app/page.tsx` / dashboard layout.
+ */
+export const SUPABASE_MISSING_ENV_MESSAGE =
+  "Supabase isn't configured yet. Copy .env.example to .env.local and fill in NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY — see README.md for step-by-step setup.";
+
+/** Only ever true outside production — safe to gate developer-only diagnostics on. */
+export function isDevelopmentEnvironment(): boolean {
+  return process.env.NODE_ENV !== "production";
+}

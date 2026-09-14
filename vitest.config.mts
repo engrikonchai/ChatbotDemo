@@ -10,6 +10,11 @@ export default defineConfig({
   },
   resolve: {
     alias: {
+      // The real `server-only` package throws unconditionally unless a
+      // bundler resolves its `react-server` export condition (which
+      // Vitest doesn't). Swap in a no-op so server-only modules can
+      // still be unit tested — see test-shims/server-only.ts.
+      "server-only": path.resolve(rootDir, "test-shims/server-only.ts"),
       "@": rootDir,
     },
   },

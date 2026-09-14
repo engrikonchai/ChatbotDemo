@@ -3,8 +3,9 @@
 import { Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { LANGUAGE_LABELS } from "@/lib/chat/translations";
+import type { Language } from "@/lib/chat/types";
 import { formatDisplayDate } from "@/lib/utils/date";
-import type { Lead, LeadStatus } from "@/lib/storage/types";
+import type { LeadRow, LeadStatus } from "@/lib/supabase/database.types";
 import { cn } from "@/lib/utils/cn";
 
 const STATUS_OPTIONS: LeadStatus[] = ["new", "contacted", "confirmed", "lost"];
@@ -17,15 +18,19 @@ const STATUS_STYLES: Record<LeadStatus, string> = {
 };
 
 interface LeadsPanelProps {
-  leads: Lead[];
+  leads: LeadRow[];
   onStatusChange: (id: string, status: LeadStatus) => void;
   onDelete: (id: string) => void;
 }
 
-function formatDateRange(lead: Lead): string {
-  if (!lead.checkIn && !lead.checkOut) return "—";
-  const inPart = lead.checkIn ? formatDisplayDate(lead.checkIn) : "?";
-  const outPart = lead.checkOut ? formatDisplayDate(lead.checkOut) : "?";
+function languageLabel(language: string): string {
+  return LANGUAGE_LABELS[language as Language] ?? language;
+}
+
+function formatDateRange(lead: LeadRow): string {
+  if (!lead.check_in && !lead.check_out) return "—";
+  const inPart = lead.check_in ? formatDisplayDate(lead.check_in) : "?";
+  const outPart = lead.check_out ? formatDisplayDate(lead.check_out) : "?";
   return `${inPart} → ${outPart}`;
 }
 
@@ -39,7 +44,7 @@ export function LeadsPanel({ leads, onStatusChange, onDelete }: LeadsPanelProps)
     );
   }
 
-  const sorted = [...leads].sort((a, b) => b.createdAt - a.createdAt);
+  const sorted = [...leads].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
   return (
     <Card className="overflow-x-auto p-0">
@@ -62,20 +67,18 @@ export function LeadsPanel({ leads, onStatusChange, onDelete }: LeadsPanelProps)
         <tbody>
           {sorted.map((lead) => (
             <tr key={lead.id} className="border-b border-navy/5 last:border-0">
-              <td className="px-4 py-3 font-mono text-xs font-semibold text-navy">{lead.id}</td>
+              <td className="px-4 py-3 font-mono text-xs font-semibold text-navy">{lead.reference}</td>
               <td className="px-4 py-3">
-                <p className="font-medium text-navy">{lead.name ?? "—"}</p>
-                <p className="text-xs uppercase tracking-wide text-navy/40">
-                  {lead.source === "handoff" ? "Human hand-off" : lead.source === "sample" ? "Sample" : "Booking enquiry"}
-                </p>
+                <p className="font-medium text-navy">{lead.name || "—"}</p>
+                <p className="text-xs uppercase tracking-wide text-navy/40">{lead.source}</p>
               </td>
               <td className="px-4 py-3 text-navy/75">{lead.contact}</td>
               <td className="px-4 py-3 text-navy/75">{formatDateRange(lead)}</td>
-              <td className="px-4 py-3 text-navy/75">{lead.guests ?? "—"}</td>
-              <td className="px-4 py-3 text-navy/75">{LANGUAGE_LABELS[lead.language]}</td>
+              <td className="px-4 py-3 text-navy/75">{lead.guest_count ?? "—"}</td>
+              <td className="px-4 py-3 text-navy/75">{languageLabel(lead.language)}</td>
               <td className="px-4 py-3">
                 <select
-                  aria-label={`Status for ${lead.id}`}
+                  aria-label={`Status for ${lead.reference}`}
                   value={lead.status}
                   onChange={(e) => onStatusChange(lead.id, e.target.value as LeadStatus)}
                   className={cn(
@@ -91,7 +94,7 @@ export function LeadsPanel({ leads, onStatusChange, onDelete }: LeadsPanelProps)
                 </select>
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-navy/55">
-                {new Date(lead.createdAt).toLocaleString("en-GB", {
+                {new Date(lead.created_at).toLocaleString("en-GB", {
                   day: "numeric",
                   month: "short",
                   hour: "2-digit",
@@ -101,9 +104,9 @@ export function LeadsPanel({ leads, onStatusChange, onDelete }: LeadsPanelProps)
               <td className="px-4 py-3 text-right">
                 <button
                   type="button"
-                  aria-label={`Delete lead ${lead.id}`}
+                  aria-label={`Delete lead ${lead.reference}`}
                   onClick={() => {
-                    if (window.confirm(`Delete enquiry ${lead.id}? This cannot be undone.`)) {
+                    if (window.confirm(`Delete enquiry ${lead.reference}? This cannot be undone.`)) {
                       onDelete(lead.id);
                     }
                   }}
