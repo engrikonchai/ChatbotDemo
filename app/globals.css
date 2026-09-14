@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+@theme {
+  /* Premium Mediterranean palette — warm white, deep navy, Adriatic blue, soft sand. */
+  --color-warm: #faf6ee;
+  --color-warm-soft: #f3ecdd;
+  --color-navy: #132238;
+  --color-navy-deep: #0b1626;
+  --color-adriatic: #1a6fa3;
+  --color-adriatic-dark: #114f78;
+  --color-adriatic-light: #e5f0f6;
+  --color-sand: #e7d9bd;
+  --color-sand-light: #f4ecdb;
+  --color-sand-dark: #cbb384;
+  --color-success: #2f7d5a;
+
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, sans-serif;
+  --font-serif: Georgia, "Iowan Old Style", "Palatino Linotype", ui-serif, serif;
+
+  --shadow-card: 0 1px 2px rgba(19, 34, 56, 0.04), 0 8px 24px -8px rgba(19, 34, 56, 0.12);
+  --shadow-card-hover: 0 4px 8px rgba(19, 34, 56, 0.06), 0 16px 32px -12px rgba(19, 34, 56, 0.18);
+  --shadow-widget: 0 12px 40px -8px rgba(11, 22, 38, 0.35);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+body {
+  background: var(--color-warm);
+  color: var(--color-navy);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Visible, consistent focus states everywhere (WCAG 2.4.7). */
+:focus-visible {
+  outline: 2px solid var(--color-adriatic);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--color-adriatic);
+  color: white;
+}
+
+/* Small utility for visually-hidden-but-accessible text. */
+.sr-only-focusable:not(:focus) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-slide-up {
+  animation: fade-slide-up 0.35s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-slide-up {
+    animation: none;
+  }
+}
