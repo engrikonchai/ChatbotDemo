@@ -23,27 +23,6 @@ export function isSupabaseConfigured(): boolean {
 }
 
 /**
- * The demo `businesses.public_widget_id` the public landing page's chat
- * widget talks to. Not one of the three variables named in the Phase 2
- * brief — added because this is a single-tenant demo: the landing page
- * needs to know *which* business's widget to render, and a business's
- * `public_widget_id` is only generated once its owner has signed up
- * (see the onboarding trigger in supabase/migrations). Find it on the
- * dashboard's Settings tab after your first sign-up and put it in
- * .env.local as NEXT_PUBLIC_WIDGET_ID. Phase 4 (embeddable widget)
- * replaces this with per-embed configuration instead of a build-time
- * environment variable.
- */
-export function getPublicWidgetId(): string | null {
-  return process.env.NEXT_PUBLIC_WIDGET_ID || null;
-}
-
-/** True once Supabase is configured AND a demo business widget id is set. */
-export function isWidgetConfigured(): boolean {
-  return isSupabaseConfigured() && getPublicWidgetId() !== null;
-}
-
-/**
  * A safe, non-sensitive message for developer-facing UI when Supabase
  * isn't configured. Never shown to a real site visitor in production —
  * see `lib/supabase/env.ts` usage in `app/page.tsx` / dashboard layout.

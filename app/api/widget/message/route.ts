@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { widgetMessageRequestSchema, firstIssueMessage } from "@/lib/validation/widget";
 import { checkRateLimit, getRequestIp } from "@/lib/server/rate-limit";
-import { apiError, logServerError, rateLimited } from "@/lib/server/api-response";
+import { apiError, ASSISTANT_UNAVAILABLE_MESSAGE, logServerError, rateLimited } from "@/lib/server/api-response";
 import {
   countLeadsForBusiness,
   generateLeadReference,
@@ -11,9 +11,13 @@ import {
   persistLeadDraft,
   resolveActiveBusiness,
   updateConversationFlowState,
+  updateMessageContent,
 } from "@/lib/server/widget-service";
-import { mockChatService } from "@/lib/chat/mock-chat-service";
+import { getChatService } from "@/lib/server/chat-provider";
 import type { ConversationState } from "@/lib/chat/types";
+
+const LEAD_SAVE_FAILED_NOTICE =
+  "Thanks — but I couldn't save your enquiry just now. Please try again in a moment, or contact the host directly.";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -35,10 +39,18 @@ export async function POST(request: Request) {
   });
   if (!rate.allowed) return rateLimited(rate.retryAfterMs);
 
+  let chatService;
+  try {
+    chatService = getChatService();
+  } catch (error) {
+    logServerError("widget/message:provider", error);
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
+  }
+
   const admin = createSupabaseAdminClient();
   if (!admin) {
-    logServerError("widget/message", "Supabase admin client unavailable (missing env vars)");
-    return apiError(503, "Chat is temporarily unavailable. Please try again shortly.");
+    logServerError("widget/message", "Supabase admin client unavailable (missing env vars)", { publicWidgetId });
+    return apiError(503, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   const business = await resolveActiveBusiness(admin, publicWidgetId);
@@ -55,19 +67,19 @@ export async function POST(request: Request) {
   // generating a reply to a message that was never persisted.
   const savedUserMessage = await insertMessages(admin, conversation.id, [{ role: "user", content: message }]);
   if (savedUserMessage.length === 0) {
-    logServerError("widget/message", "Failed to persist visitor message");
-    return apiError(500, "Could not save your message. Please try again.");
+    logServerError("widget/message", "Failed to persist visitor message", { conversationId });
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   const state = (
     conversation.flow_state && Object.keys(conversation.flow_state).length > 0
       ? conversation.flow_state
-      : mockChatService.createInitialState(conversation.detected_language as ConversationState["language"])
+      : chatService.createInitialState(conversation.detected_language as ConversationState["language"])
   ) as ConversationState;
 
   const nextLeadSequence = (await countLeadsForBusiness(admin, business.id)) + 1;
 
-  const result = await mockChatService.sendMessage({
+  const result = await chatService.sendMessage({
     message,
     state,
     history: [],
@@ -80,14 +92,27 @@ export async function POST(request: Request) {
     result.messages.map((m) => ({ role: m.role, content: m.text, intent: m.intent })),
   );
   if (savedAssistantMessages.length !== result.messages.length) {
-    logServerError("widget/message", "Failed to persist assistant reply");
-    return apiError(500, "Could not save the assistant's reply. Please try again.");
+    logServerError("widget/message", "Failed to persist assistant reply", { conversationId });
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   await updateConversationFlowState(admin, conversation.id, {
     flowState: result.state,
     leadCreated: Boolean(result.leadDraft),
   });
+
+  // Whether the booking/hand-off record actually got saved — the
+  // response (and, if not, the just-saved success message) must reflect
+  // reality, not what the mock engine merely *intended* to happen.
+  let leadCreated = false;
+  let leadReference: string | null = null;
+  const responseMessages = savedAssistantMessages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    text: m.content,
+    intent: m.intent,
+    createdAt: m.created_at,
+  }));
 
   if (result.leadDraft) {
     const reference = result.leadReference ?? generateLeadReference(nextLeadSequence);
@@ -97,23 +122,30 @@ export async function POST(request: Request) {
       reference,
       draft: result.leadDraft,
     });
+
     if (error) {
-      logServerError("widget/message:persistLeadDraft", error);
+      logServerError("widget/message:persistLeadDraft", error, { conversationId, businessId: business.id });
+      // The assistant's reply text (already saved above) announced a
+      // reference number that doesn't actually exist in `leads` — correct
+      // the stored message and what's returned to the visitor rather than
+      // reporting success for a database write that failed.
+      const lastMessage = responseMessages[responseMessages.length - 1];
+      if (lastMessage) {
+        await updateMessageContent(admin, lastMessage.id, LEAD_SAVE_FAILED_NOTICE);
+        lastMessage.text = LEAD_SAVE_FAILED_NOTICE;
+      }
+    } else {
+      leadCreated = true;
+      leadReference = reference;
     }
   }
 
   return NextResponse.json({
-    messages: savedAssistantMessages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      text: m.content,
-      intent: m.intent,
-      createdAt: m.created_at,
-    })),
+    messages: responseMessages,
     language: result.state.language,
     flowActive: result.state.flow !== null,
     suggestedReplies: result.suggestedReplies ?? [],
-    leadCreated: Boolean(result.leadDraft),
-    leadReference: result.leadReference ?? null,
+    leadCreated,
+    leadReference,
   });
 }

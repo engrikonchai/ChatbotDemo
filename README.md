@@ -71,9 +71,11 @@ In the project dashboard: **Settings → API**.
 cp .env.example .env.local
 ```
 
-Fill in the two `NEXT_PUBLIC_SUPABASE_*` values and `SUPABASE_SERVICE_ROLE_KEY`
-now. Leave `NEXT_PUBLIC_WIDGET_ID` blank for now — you'll get it from the
-dashboard after step 6.
+Fill in the two `NEXT_PUBLIC_SUPABASE_*` values and `SUPABASE_SERVICE_ROLE_KEY`.
+Leave `CHAT_PROVIDER=mock` as-is — that's the only chat backend implemented
+so far (see "Mock mode" below). Nothing else is needed: the public landing
+page finds its business itself, server-side, from the well-known slug
+`adria-stay-budva` — there's no widget id to copy-paste.
 
 **Never** put the service-role key behind `NEXT_PUBLIC_`, and never commit
 `.env.local` (it's already git-ignored).
@@ -124,17 +126,18 @@ your profile, your first business ("Adria Stay Budva"), the same FAQ
 knowledge from `lib/chat/knowledge.ts`, and default widget settings — all in
 one transaction, safely repeatable if it were ever triggered twice.
 
-### 7. Get your widget id and finish `.env.local`
+### 7. Check your setup on the dashboard's Settings tab
 
-Sign in, go to the dashboard's **Settings** tab, and copy the **Widget ID**
-shown there into `.env.local`:
+Sign in and open the dashboard's **Settings** tab. It shows your business's
+**slug** (must read exactly `adria-stay-budva` — highlighted red if not) and
+its **Widget ID** (shown for reference only, never needed in `.env.local`).
+If the slug is wrong, inactive, or mock AI got toggled off, click
+**Repair widget setup** — this re-runs the same idempotent onboarding logic
+against your own business only (see "The widget stopped resolving a
+business" below for why this can happen and the authoritative migration fix).
 
-```
-NEXT_PUBLIC_WIDGET_ID=<paste it here>
-```
-
-Restart `npm run dev`. The "Ask Adria" button on `/` now talks to your
-Supabase project.
+The "Ask Adria" button on `/` already talks to your Supabase project — no
+restart or extra config needed.
 
 ### 8. Test locally
 
@@ -142,9 +145,11 @@ Supabase project.
 npm run lint && npm run typecheck && npm run test && npm run build
 ```
 
-Then manually: open `/`, chat with the widget (try a booking enquiry through
-to submission, and try asking to speak to a human), then check `/dashboard`
-— the conversation, messages and lead/hand-off should all appear.
+Then manually, **while signed out of everything**: open `/`, chat with the
+widget (try a booking enquiry through to submission, and try asking to
+speak to a human) — none of it requires signing in. Then sign in and check
+`/dashboard` — the conversation, messages and lead/hand-off should all
+appear.
 
 ### 9. Add environment variables to Vercel (or your host)
 
@@ -154,7 +159,7 @@ Project → **Settings → Environment Variables**, add all four:
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
 SUPABASE_SERVICE_ROLE_KEY
-NEXT_PUBLIC_WIDGET_ID
+CHAT_PROVIDER=mock
 ```
 
 Mark `SUPABASE_SERVICE_ROLE_KEY` as a **server-only secret** if your host
@@ -170,6 +175,37 @@ Back in **Authentication → URL Configuration**, once deployed:
 - Update **Site URL** to your production domain.
 - Add `https://<your-domain>/auth/callback` to **Redirect URLs** (keep the
   localhost one too if you still develop locally).
+
+### Mock mode
+
+`CHAT_PROVIDER=mock` is read server-side only, in `lib/server/chat-provider.ts`,
+by the `/api/widget/*` routes — the browser never chooses or even sees which
+provider is active. It defaults to `"mock"` even if the variable is unset,
+and never looks at `OPENAI_API_KEY` in any way: the assistant keeps working
+in mock mode with no AI API key at all, in every environment (local, Vercel
+preview, Vercel production). Any other value throws a clear server-side
+error rather than silently falling back to mock (see
+`tests/chat-provider.test.ts`). A future `"openai"` provider is Phase 3 —
+see ROADMAP.md.
+
+### If the public chat widget stops working
+
+This happened once already (see git history) — the demo business's slug
+wasn't the bare `adria-stay-budva` the landing page looks up, so
+`resolveActiveBusinessBySlug` found nothing and the widget correctly, safely
+did nothing rather than fake a session. If it happens again:
+
+1. Check the dashboard's **Settings** tab (step 7 above) — the slug is
+   shown there, highlighted if wrong, with a one-click **Repair widget
+   setup** button.
+2. Or run the authoritative fix directly:
+   `supabase/migrations/20260202000000_repair_onboarding.sql` — safe to run
+   any number of times, fixes the slug for the oldest existing business,
+   re-activates it, re-enables mock AI, and backfills any `auth.users` row
+   that's missing a profile/business.
+3. In development, an unresolved business shows a small dev-only notice
+   next to where the chat button would be (never shown in production —
+   see `components/chat/ChatWidget.tsx`).
 
 ### Verifying Row Level Security manually
 
@@ -241,13 +277,17 @@ lib/supabase/
   database.types.ts           hand-written row types mirroring the SQL schema
 
 lib/server/
-  widget-service.ts        business resolution + conversation/message/lead/hand-off persistence
+  widget-service.ts        business resolution (by public_widget_id and by slug) + conversation/message/lead/hand-off persistence
+  chat-provider.ts           server-side-only CHAT_PROVIDER selection — never checks OPENAI_API_KEY
   rate-limit.ts             in-memory rate limiter for the public widget routes
   api-response.ts            small consistent JSON error/logging helpers
 
 lib/validation/
   widget.ts                Zod schemas for every /api/widget/* request
   auth.ts                    Zod schemas for the auth forms
+
+lib/shared/
+  messages.ts               copy shared between server routes and the client widget (no drift between the two)
 
 lib/client/
   visitor.ts               the only LocalStorage left — visitor id + current conversation id
@@ -290,11 +330,18 @@ The mock service answers only from `lib/chat/knowledge.ts`. It will not:
 
 ### Public widget security, in one place
 
-- The browser only ever sends a `public_widget_id` (a non-secret UUID) —
-  never a `business_id`, and nothing is ever accepted as "proof" of which
-  business/conversation a request belongs to. Every route re-resolves the
-  business from `public_widget_id` and verifies a `conversationId` actually
-  belongs to that business *and* that visitor (`lib/server/widget-service.ts`).
+- `app/page.tsx` resolves the demo business's `public_widget_id` itself,
+  server-side, from the well-known slug `adria-stay-budva` (using the
+  service-role client, since there's no owner session on the public
+  landing page) and passes it into `<ChatWidget publicWidgetId={...} />`
+  as a prop — not a build-time env var, and not dependent on which owner
+  is signed in.
+- From there, the browser only ever sends that `public_widget_id` (a
+  non-secret UUID) — never a `business_id`, and nothing is ever accepted
+  as "proof" of which business/conversation a request belongs to. Every
+  route re-resolves the business from `public_widget_id` and verifies a
+  `conversationId` actually belongs to that business *and* that visitor
+  (`lib/server/widget-service.ts`).
 - All four `/api/widget/*` routes validate input with Zod, rate-limit by
   `widgetId:visitorId:ip`, and use the service-role client — which is why
   there are **no Supabase policies granting the `anon` role anything at
@@ -348,15 +395,30 @@ Unit tests (`tests/*.test.ts`, Vitest) cover:
   ever returned when its id, business and visitor all match — a forged or
   guessed conversation id from a different business or visitor gets `null`
 - **persistence shape** for assistant replies, leads and hand-offs (records
-  are inserted with the fields a real read-back would expect)
+  are inserted with the fields a real read-back would expect), including
+  that a lead is never reported as created if the database insert actually
+  failed (and the already-saved success message gets corrected, not left
+  claiming a reference number that doesn't exist)
+- **full route-level tests** for all four `/api/widget/*` handlers against a
+  faked Supabase client (`tests/widget-routes.test.ts`): a session can be
+  created for an unauthenticated visitor, an invalid or inactive widget id
+  is rejected identically, a message is saved and answered, and a full
+  8-turn booking flow ends with exactly one row in `leads`
+- **`getChatService`** (`tests/chat-provider.test.ts`): defaults to mock,
+  works with or without `OPENAI_API_KEY` set, and fails clearly (never
+  silently) for an unsupported `CHAT_PROVIDER`
 - the in-memory rate limiter (allows up to the limit, blocks over it, tracks
   keys independently, resets after the window)
 - missing-environment-variable behaviour (`isSupabaseConfigured`,
-  `isWidgetConfigured`, `createSupabaseAdminClient` all fail safely to
-  `false`/`null` rather than throwing)
+  `createSupabaseAdminClient` fail safely to `false`/`null` rather than
+  throwing)
 - a static contract over the RLS migration SQL (RLS enabled on every table,
   no `using (true)`, no `anon`/`public` grants, every policy scoped through
-  `auth.uid()`)
+  `auth.uid()`) and over `proxy.ts` (its matcher only ever targets
+  `/dashboard`, so the homepage and `/api/widget/*` are never redirected to
+  `/login`)
+- a regression guard confirming the Phase-1 LocalStorage-as-database modules
+  stay deleted and nothing re-imports them as a fallback
 
 What these tests **can't** cover without a live Postgres project — actual
 end-to-end RLS enforcement, protected-dashboard redirects through real
@@ -387,10 +449,16 @@ above and step 8 of the setup guide.
   server-side (a stateless HTTP request can't otherwise resume a multi-step
   flow). It's a `jsonb` mirror of `ConversationState` from
   `lib/chat/types.ts`; see `supabase/migrations/20260201000100_conversation_tables.sql`.
-- **`NEXT_PUBLIC_WIDGET_ID`** is an addition beyond the three named
-  environment variables — necessary because this is a single-tenant demo
-  and the landing page needs to know which business's widget to render (see
-  `.env.example` and `lib/supabase/env.ts` for the full reasoning).
+- **`CHAT_PROVIDER`** is an addition beyond the three named Supabase
+  environment variables — server-side-only provider selection so mock mode
+  never depends on `OPENAI_API_KEY` and the browser never picks the
+  backend (see `.env.example` and `lib/server/chat-provider.ts`).
+- **The demo is single-tenant by design.** The public landing page always
+  resolves the one business with slug `adria-stay-budva`
+  (`lib/server/widget-service.ts` `resolveActiveBusinessBySlug`) — there's
+  no concept yet of the landing page serving a different business per
+  request. Phase 4 (embeddable widget) is where that becomes per-embed
+  configuration instead of a fixed slug.
 - Lead reference numbers are generated from a `count(*)` over existing leads
   — fine at this scale, but two enquiries submitted in the same instant
   could in principle race to the same sequence number. `leads.reference`

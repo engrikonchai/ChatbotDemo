@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { widgetSessionRequestSchema, firstIssueMessage } from "@/lib/validation/widget";
 import { checkRateLimit, getRequestIp } from "@/lib/server/rate-limit";
-import { apiError, logServerError, rateLimited } from "@/lib/server/api-response";
+import { apiError, ASSISTANT_UNAVAILABLE_MESSAGE, logServerError, rateLimited } from "@/lib/server/api-response";
 import {
   createConversationRow,
   getWidgetSettings,
@@ -12,7 +12,7 @@ import {
   resolveActiveBusiness,
   resolveSessionLanguage,
 } from "@/lib/server/widget-service";
-import { mockChatService } from "@/lib/chat/mock-chat-service";
+import { getChatService } from "@/lib/server/chat-provider";
 import { GREETING } from "@/lib/chat/translations";
 import type { ConversationState, Language } from "@/lib/chat/types";
 import type { WidgetSettingsRow } from "@/lib/supabase/database.types";
@@ -44,10 +44,18 @@ export async function POST(request: Request) {
   });
   if (!rate.allowed) return rateLimited(rate.retryAfterMs);
 
+  let chatService;
+  try {
+    chatService = getChatService();
+  } catch (error) {
+    logServerError("widget/session:provider", error);
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
+  }
+
   const admin = createSupabaseAdminClient();
   if (!admin) {
-    logServerError("widget/session", "Supabase admin client unavailable (missing env vars)");
-    return apiError(503, "Chat is temporarily unavailable. Please try again shortly.");
+    logServerError("widget/session", "Supabase admin client unavailable (missing env vars)", { publicWidgetId });
+    return apiError(503, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   const business = await resolveActiveBusiness(admin, publicWidgetId);
@@ -88,7 +96,7 @@ export async function POST(request: Request) {
   }
 
   const language: Language = resolveSessionLanguage(business, requestedLanguage);
-  const initialState = mockChatService.createInitialState(language);
+  const initialState = chatService.createInitialState(language);
 
   const conversation = await createConversationRow(admin, {
     businessId: business.id,
@@ -97,8 +105,8 @@ export async function POST(request: Request) {
     state: initialState,
   });
   if (!conversation) {
-    logServerError("widget/session", "Failed to create conversation row");
-    return apiError(500, "Could not start a new conversation. Please try again.");
+    logServerError("widget/session", "Failed to create conversation row", { publicWidgetId, businessId: business.id });
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   // Owner-editable welcome message, falling back to the built-in default.
@@ -106,6 +114,14 @@ export async function POST(request: Request) {
   const [savedGreeting] = await insertMessages(admin, conversation.id, [
     { role: "assistant", content: greetingText, intent: "greeting" },
   ]);
+
+  // Never claim the conversation started successfully if the greeting
+  // itself couldn't actually be saved — the caller would otherwise show
+  // a "working" chat window backed by a conversation with no messages.
+  if (!savedGreeting) {
+    logServerError("widget/session", "Failed to persist greeting message", { conversationId: conversation.id });
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
+  }
 
   return NextResponse.json({
     enabled: true,
@@ -115,11 +131,11 @@ export async function POST(request: Request) {
     flowActive: false,
     messages: [
       {
-        id: savedGreeting?.id ?? `greeting_${conversation.id}`,
+        id: savedGreeting.id,
         role: "assistant",
         text: greetingText,
         intent: "greeting",
-        createdAt: savedGreeting?.created_at ?? new Date().toISOString(),
+        createdAt: savedGreeting.created_at,
       },
     ],
     widget: widgetInfo,

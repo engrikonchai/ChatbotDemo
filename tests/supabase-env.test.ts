@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-const ENV_KEYS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "NEXT_PUBLIC_WIDGET_ID"] as const;
+const ENV_KEYS = ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY"] as const;
 let originalEnv: Record<string, string | undefined>;
 
 beforeEach(() => {
@@ -30,23 +30,6 @@ describe("Supabase env helpers with missing environment variables", () => {
 
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
     expect(isSupabaseConfigured()).toBe(true);
-  });
-
-  it("getPublicWidgetId is null when NEXT_PUBLIC_WIDGET_ID is unset", async () => {
-    const { getPublicWidgetId } = await import("@/lib/supabase/env");
-    expect(getPublicWidgetId()).toBeNull();
-  });
-
-  it("isWidgetConfigured requires both Supabase config and a widget id", async () => {
-    const { isWidgetConfigured } = await import("@/lib/supabase/env");
-    expect(isWidgetConfigured()).toBe(false);
-
-    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://example.supabase.co";
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon-key";
-    expect(isWidgetConfigured()).toBe(false); // no widget id yet
-
-    process.env.NEXT_PUBLIC_WIDGET_ID = "11111111-1111-4111-8111-111111111111";
-    expect(isWidgetConfigured()).toBe(true);
   });
 });
 

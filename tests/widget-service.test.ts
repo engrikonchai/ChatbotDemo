@@ -7,6 +7,7 @@ import {
   loadOwnedConversation,
   persistLeadDraft,
   resolveActiveBusiness,
+  resolveActiveBusinessBySlug,
   resolveSessionLanguage,
 } from "@/lib/server/widget-service";
 import type { BusinessRow } from "@/lib/supabase/database.types";
@@ -269,5 +270,38 @@ describe("createLeadRow / createHandoffRow — Human hand-off and lead persisten
       draft: bookingDraft,
     });
     expect(bookingResult).toMatchObject({ reference: "ASB-2026-0003", name: "Ana" });
+  });
+});
+
+describe("resolveActiveBusinessBySlug — used by the public homepage, no owner session involved", () => {
+  it("returns the business for the well-known demo slug", async () => {
+    const admin = createMockSupabase({
+      businesses: (state) => {
+        const wantsSlug = state.filters.some(([c, v]) => c === "slug" && v === "adria-stay-budva");
+        const wantsActive = state.filters.some(([c, v]) => c === "is_active" && v === true);
+        return wantsSlug && wantsActive ? { data: ACTIVE_BUSINESS } : { data: null };
+      },
+    });
+
+    const business = await resolveActiveBusinessBySlug(admin as never, "adria-stay-budva");
+    expect(business).toEqual(ACTIVE_BUSINESS);
+  });
+
+  it("returns null when no business has that slug (a clear config problem, not a crash)", async () => {
+    const admin = createMockSupabase({ businesses: () => ({ data: null }) });
+    const business = await resolveActiveBusinessBySlug(admin as never, "adria-stay-budva");
+    expect(business).toBeNull();
+  });
+
+  it("returns null for an inactive business with the right slug", async () => {
+    const admin = createMockSupabase({
+      businesses: (state) => {
+        const wantsActive = state.filters.some(([c, v]) => c === "is_active" && v === true);
+        return wantsActive ? { data: null } : { data: { ...ACTIVE_BUSINESS, is_active: false } };
+      },
+    });
+
+    const business = await resolveActiveBusinessBySlug(admin as never, "adria-stay-budva");
+    expect(business).toBeNull();
   });
 });

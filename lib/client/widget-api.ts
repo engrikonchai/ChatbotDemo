@@ -1,7 +1,6 @@
 "use client";
 
 import type { Language } from "@/lib/chat/types";
-import { getPublicWidgetId } from "@/lib/supabase/env";
 
 export interface WidgetApiMessage {
   id: string;
@@ -41,11 +40,12 @@ export interface SessionResponse {
 }
 
 export function startWidgetSession(params: {
+  publicWidgetId: string;
   visitorId: string;
   language?: Language;
   conversationId?: string;
 }): Promise<WidgetApiResult<SessionResponse>> {
-  return postJson("/api/widget/session", { publicWidgetId: getPublicWidgetId(), ...params });
+  return postJson("/api/widget/session", params);
 }
 
 export interface MessageResponse {
@@ -58,9 +58,10 @@ export interface MessageResponse {
 }
 
 export function sendWidgetMessage(params: {
+  publicWidgetId: string;
   visitorId: string;
   conversationId: string;
   message: string;
 }): Promise<WidgetApiResult<MessageResponse>> {
-  return postJson("/api/widget/message", { publicWidgetId: getPublicWidgetId(), ...params });
+  return postJson("/api/widget/message", params);
 }

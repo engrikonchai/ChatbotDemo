@@ -32,6 +32,23 @@ export async function resolveActiveBusiness(
   return data as BusinessRow;
 }
 
+/**
+ * Resolves the public landing page's business by its unique slug —
+ * used server-side (never from the browser) so the page can hand the
+ * chat widget a `public_widget_id` without depending on which owner
+ * happens to be signed in, without requiring the visitor to be signed
+ * in at all, and without a fragile build-time env var that has to be
+ * copy-pasted after every sign-up. Returns `null` for a missing or
+ * inactive business — callers show a developer-facing notice rather
+ * than silently failing (see app/page.tsx).
+ */
+export async function resolveActiveBusinessBySlug(admin: AdminClient, slug: string): Promise<BusinessRow | null> {
+  const { data, error } = await admin.from("businesses").select("*").eq("slug", slug).eq("is_active", true).maybeSingle();
+
+  if (error || !data) return null;
+  return data as BusinessRow;
+}
+
 export async function getWidgetSettings(
   admin: AdminClient,
   businessId: string,
@@ -124,6 +141,16 @@ export async function insertMessages(
 
   if (error || !data) return [];
   return data as { id: string; role: string; content: string; intent: string | null; created_at: string }[];
+}
+
+/**
+ * Corrects an already-saved message's text — used only when a message
+ * announced something (e.g. a lead reference) that a subsequent write
+ * then failed to actually persist, so the stored transcript and the
+ * dashboard never show a success that didn't happen.
+ */
+export async function updateMessageContent(admin: AdminClient, messageId: string, content: string): Promise<void> {
+  await admin.from("messages").update({ content }).eq("id", messageId);
 }
 
 export async function updateConversationFlowState(

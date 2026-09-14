@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { widgetLeadRequestSchema, firstIssueMessage } from "@/lib/validation/widget";
 import { checkRateLimit, getRequestIp } from "@/lib/server/rate-limit";
-import { apiError, logServerError, rateLimited } from "@/lib/server/api-response";
+import { apiError, ASSISTANT_UNAVAILABLE_MESSAGE, logServerError, rateLimited } from "@/lib/server/api-response";
 import {
   countLeadsForBusiness,
   createLeadRow,
@@ -42,8 +42,8 @@ export async function POST(request: Request) {
 
   const admin = createSupabaseAdminClient();
   if (!admin) {
-    logServerError("widget/lead", "Supabase admin client unavailable (missing env vars)");
-    return apiError(503, "This isn't available right now. Please try again shortly.");
+    logServerError("widget/lead", "Supabase admin client unavailable (missing env vars)", { publicWidgetId });
+    return apiError(503, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   const business = await resolveActiveBusiness(admin, publicWidgetId);
@@ -72,8 +72,8 @@ export async function POST(request: Request) {
   });
 
   if (error || !data) {
-    logServerError("widget/lead", error);
-    return apiError(500, "Could not save your enquiry. Please try again.");
+    logServerError("widget/lead", error, { businessId: business.id });
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   return NextResponse.json({ reference: data.reference }, { status: 201 });

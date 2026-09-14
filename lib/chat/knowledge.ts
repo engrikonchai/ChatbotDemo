@@ -1,6 +1,15 @@
 import type { Intent, Language } from "@/lib/chat/types";
 
 /**
+ * The Supabase `businesses.slug` for this single-tenant demo. The
+ * public landing page resolves its `public_widget_id` server-side from
+ * this slug (see `lib/server/widget-service.ts` and `app/page.tsx`) —
+ * it never depends on which owner is signed in, and never requires the
+ * visitor to be signed in.
+ */
+export const DEMO_BUSINESS_SLUG = "adria-stay-budva";
+
+/**
  * The single source of truth for verified business facts. The mock
  * chat service only ever answers from here — it never invents prices,
  * availability, or policies that aren't listed below. The dashboard's
@@ -84,4 +93,25 @@ export const FAQ_ANSWERS: Partial<Record<Intent, Record<Language, string>>> & Re
     me: "Cijena po noćenju zavisi od datuma i potvrđuje je direktno domaćin. Mogu pokrenuti kratak upit za rezervaciju kako bi domaćin potvrdio cijenu i dostupnost — želite li to?",
     ru: "Стоимость за ночь зависит от дат и подтверждается непосредственно хозяином. Я могу начать короткий запрос на бронирование, чтобы хозяин подтвердил цену и наличие свободных дат — хотите?",
   },
+};
+
+/**
+ * A representative question for each FAQ category — used only where a
+ * display/seed question is needed (the dashboard's knowledge editor,
+ * the owner-side onboarding repair action). Keep in sync with the
+ * seed data in supabase/migrations/20260201000300_onboarding.sql and
+ * 20260202000000_repair_onboarding.sql.
+ */
+export const FAQ_QUESTIONS: Record<FaqIntent, string> = {
+  parking: "Is parking available?",
+  checkin: "What time is check-in?",
+  checkout: "What time is check-out?",
+  pets: "Are pets allowed?",
+  wifi: "Is there Wi-Fi?",
+  smoking: "Is smoking allowed?",
+  beach: "How far is the beach?",
+  old_town: "How far is the Old Town?",
+  airport_transfer: "Can you arrange an airport transfer?",
+  payment: "How do I pay?",
+  price: "How much does it cost per night?",
 };

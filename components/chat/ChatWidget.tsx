@@ -8,7 +8,8 @@ import { onOpenChatWidget } from "@/lib/chat/widget-events";
 import { SUGGESTED_QUESTIONS } from "@/lib/chat/translations";
 import { sendWidgetMessage, startWidgetSession, type WidgetApiMessage } from "@/lib/client/widget-api";
 import { clearLocalVisitorSession, getOrCreateVisitorId, getStoredConversationId, setStoredConversationId } from "@/lib/client/visitor";
-import { isDevelopmentEnvironment, isWidgetConfigured } from "@/lib/supabase/env";
+import { isDevelopmentEnvironment } from "@/lib/supabase/env";
+import { ASSISTANT_UNAVAILABLE_MESSAGE } from "@/lib/shared/messages";
 
 function toChatMessage(m: WidgetApiMessage): ChatMessage {
   return {
@@ -20,19 +21,34 @@ function toChatMessage(m: WidgetApiMessage): ChatMessage {
   };
 }
 
-type WidgetAvailability = "checking" | "unavailable" | "not-configured" | "available";
+type WidgetAvailability = "not-configured" | "unavailable" | "available";
+
+interface ChatWidgetProps {
+  /**
+   * The demo business's public, non-secret `businesses.public_widget_id`,
+   * resolved server-side (see app/page.tsx) from the well-known slug
+   * "adria-stay-budva" — never from a build-time env var, and never
+   * dependent on which owner happens to be signed in. `null` means
+   * Supabase isn't configured yet, or that business doesn't exist/isn't
+   * active.
+   */
+  publicWidgetId: string | null;
+}
 
 /**
- * The floating "Ask Adria" widget. All conversation state now lives in
- * Supabase — this component is a thin, stateful client for the
- * `/api/widget/session` and `/api/widget/message` routes (see
- * lib/client/widget-api.ts). The mock chat engine itself still runs
- * exactly as it did in Phase 1 (lib/chat/mock-chat-service.ts,
- * unchanged) — it now just runs inside those Route Handlers instead of
- * in this component, so replies can be persisted by trusted server code.
+ * The floating "Ask Adria" widget. Requires no authentication — any
+ * visitor can use it. All conversation state lives in Supabase; this
+ * component is a thin, stateful client for the `/api/widget/session`
+ * and `/api/widget/message` routes (see lib/client/widget-api.ts). The
+ * mock chat engine itself still runs exactly as it did in Phase 1
+ * (lib/chat/mock-chat-service.ts, unchanged) — it now just runs inside
+ * those Route Handlers instead of in this component, so replies can be
+ * persisted by trusted server code. Provider selection (mock vs. a
+ * future real AI) happens entirely server-side — this component never
+ * sees or decides that.
  */
-export function ChatWidget() {
-  const [availability, setAvailability] = useState<WidgetAvailability>("checking");
+export function ChatWidget({ publicWidgetId }: ChatWidgetProps) {
+  const [availability, setAvailability] = useState<WidgetAvailability>(publicWidgetId ? "available" : "not-configured");
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [language, setLanguage] = useState<Language>("en");
@@ -46,18 +62,18 @@ export function ChatWidget() {
   const visitorIdRef = useRef<string>("");
 
   useEffect(() => {
-    // Intentional one-time client-side check (LocalStorage + build-time
-    // env vars aren't available/meaningful during server rendering).
+    // LocalStorage isn't available during server rendering, so the
+    // visitor id can only be created/read once mounted on the client.
     visitorIdRef.current = getOrCreateVisitorId();
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setAvailability(isWidgetConfigured() ? "available" : "not-configured");
   }, []);
 
   const ensureConversation = useCallback(async (): Promise<string | null> => {
+    if (!publicWidgetId) return null;
     if (conversationId) return conversationId;
 
     setIsLoading(true);
     const result = await startWidgetSession({
+      publicWidgetId,
       visitorId: visitorIdRef.current,
       conversationId: getStoredConversationId() ?? undefined,
     });
@@ -83,12 +99,12 @@ export function ChatWidget() {
     setMessages((sessionMessages ?? []).map(toChatMessage));
     setWidgetTitle(widget?.title);
     return newId;
-  }, [conversationId]);
+  }, [publicWidgetId, conversationId]);
 
   const handleSend = useCallback(
     async (rawText: string) => {
       const text = rawText.trim();
-      if (!text) return;
+      if (!text || !publicWidgetId) return;
 
       const activeConversationId = await ensureConversation();
       if (!activeConversationId) return;
@@ -104,6 +120,7 @@ export function ChatWidget() {
       setIsLoading(true);
 
       const result = await sendWidgetMessage({
+        publicWidgetId,
         visitorId: visitorIdRef.current,
         conversationId: activeConversationId,
         message: text,
@@ -117,7 +134,7 @@ export function ChatWidget() {
           {
             id: `error_${Date.now()}`,
             role: "assistant",
-            text: "Sorry, something went wrong sending that. Please try again.",
+            text: ASSISTANT_UNAVAILABLE_MESSAGE,
             timestamp: Date.now(),
           },
         ]);
@@ -129,7 +146,7 @@ export function ChatWidget() {
       setFlowActive(result.data.flowActive);
       setQuickReplies(result.data.suggestedReplies.length > 0 ? result.data.suggestedReplies : undefined);
     },
-    [ensureConversation],
+    [publicWidgetId, ensureConversation],
   );
 
   const handleOpen = useCallback(() => {
@@ -175,16 +192,14 @@ export function ChatWidget() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [isOpen, handleClose]);
 
-  if (availability === "checking") return null;
-
   if (availability === "not-configured") {
     if (!isDevelopmentEnvironment()) return null; // never show a config error to real visitors
     return (
       <div className="fixed bottom-4 right-4 z-50 max-w-xs rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 shadow-card sm:bottom-6 sm:right-6">
         <p className="font-semibold">Dev only — chat widget not configured</p>
         <p className="mt-1">
-          Set NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY and NEXT_PUBLIC_WIDGET_ID in .env.local.
-          See README.md.
+          Either Supabase isn&apos;t configured, or no active business with slug &quot;adria-stay-budva&quot;
+          was found. Sign up once at /signup, then check the dashboard&apos;s Settings tab. See README.md.
         </p>
       </div>
     );
@@ -197,7 +212,7 @@ export function ChatWidget() {
           {availability === "unavailable" ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-2xl border border-navy/10 bg-white p-6 text-center shadow-widget">
               <p className="font-serif text-lg font-semibold text-navy">Chat is temporarily unavailable</p>
-              <p className="text-sm text-navy/60">Please check back shortly, or explore the website in the meantime.</p>
+              <p className="text-sm text-navy/60">{ASSISTANT_UNAVAILABLE_MESSAGE}</p>
               <button
                 type="button"
                 onClick={handleClose}

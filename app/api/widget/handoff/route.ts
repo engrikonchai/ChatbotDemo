@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { widgetHandoffRequestSchema, firstIssueMessage } from "@/lib/validation/widget";
 import { checkRateLimit, getRequestIp } from "@/lib/server/rate-limit";
-import { apiError, logServerError, rateLimited } from "@/lib/server/api-response";
+import { apiError, ASSISTANT_UNAVAILABLE_MESSAGE, logServerError, rateLimited } from "@/lib/server/api-response";
 import { createHandoffRow, loadOwnedConversation, resolveActiveBusiness } from "@/lib/server/widget-service";
 
 /**
@@ -32,8 +32,8 @@ export async function POST(request: Request) {
 
   const admin = createSupabaseAdminClient();
   if (!admin) {
-    logServerError("widget/handoff", "Supabase admin client unavailable (missing env vars)");
-    return apiError(503, "This isn't available right now. Please try again shortly.");
+    logServerError("widget/handoff", "Supabase admin client unavailable (missing env vars)", { publicWidgetId });
+    return apiError(503, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   const business = await resolveActiveBusiness(admin, publicWidgetId);
@@ -55,8 +55,8 @@ export async function POST(request: Request) {
   });
 
   if (error || !data) {
-    logServerError("widget/handoff", error);
-    return apiError(500, "Could not save your request. Please try again.");
+    logServerError("widget/handoff", error, { businessId: business.id });
+    return apiError(500, ASSISTANT_UNAVAILABLE_MESSAGE);
   }
 
   return NextResponse.json({ id: data.id }, { status: 201 });

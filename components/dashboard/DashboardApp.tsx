@@ -207,6 +207,7 @@ export function DashboardApp({
                   refresh();
                 });
               }}
+              onRepaired={refresh}
             />
           ) : null}
         </div>

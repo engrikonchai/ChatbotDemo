@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { LANGUAGE_LABELS } from "@/lib/chat/translations";
+import { DEMO_BUSINESS_SLUG } from "@/lib/chat/knowledge";
 import type { Language } from "@/lib/chat/types";
 import type { BusinessRow, WidgetSettingsRow } from "@/lib/supabase/database.types";
-import type { WidgetSettingsEdit } from "@/app/dashboard/actions";
+import { repairOnboardingAction, type WidgetSettingsEdit } from "@/app/dashboard/actions";
 import { cn } from "@/lib/utils/cn";
 
 const ALL_LANGUAGES: Language[] = ["en", "me", "ru"];
@@ -15,6 +16,7 @@ interface SettingsPanelProps {
   widgetSettings: WidgetSettingsRow | null;
   onLanguagesChange: (languages: Language[]) => void;
   onWidgetSettingsChange: (edit: Partial<WidgetSettingsEdit>) => void;
+  onRepaired: () => void;
 }
 
 function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
@@ -37,12 +39,30 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-export function SettingsPanel({ business, widgetSettings, onLanguagesChange, onWidgetSettingsChange }: SettingsPanelProps) {
+export function SettingsPanel({
+  business,
+  widgetSettings,
+  onLanguagesChange,
+  onWidgetSettingsChange,
+  onRepaired,
+}: SettingsPanelProps) {
   const supportedLanguages = business.supported_languages as Language[];
   const [title, setTitle] = useState(widgetSettings?.title ?? "Adria Assistant");
   const [welcomeEn, setWelcomeEn] = useState(widgetSettings?.welcome_message_en ?? "");
   const [welcomeMe, setWelcomeMe] = useState(widgetSettings?.welcome_message_me ?? "");
   const [welcomeRu, setWelcomeRu] = useState(widgetSettings?.welcome_message_ru ?? "");
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [repairMessage, setRepairMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const slugLooksRight = business.slug === DEMO_BUSINESS_SLUG;
+
+  async function handleRepair() {
+    setIsRepairing(true);
+    setRepairMessage(null);
+    const result = await repairOnboardingAction();
+    setIsRepairing(false);
+    setRepairMessage({ ok: result.ok, text: result.message });
+    if (result.ok) onRepaired();
+  }
 
   function toggleLanguage(language: Language) {
     const isEnabled = supportedLanguages.includes(language);
@@ -60,15 +80,56 @@ export function SettingsPanel({ business, widgetSettings, onLanguagesChange, onW
   return (
     <div className="space-y-5">
       <Card className="p-5">
-        <p className="text-sm font-semibold text-navy">Widget ID</p>
+        <p className="text-sm font-semibold text-navy">Widget ID &amp; business slug</p>
         <p className="mt-0.5 text-xs text-navy/55">
-          Put this in your <code className="rounded bg-warm px-1 py-0.5">.env.local</code> as{" "}
-          <code className="rounded bg-warm px-1 py-0.5">NEXT_PUBLIC_WIDGET_ID</code> so the public website knows
-          which business&apos;s chat widget to show.
+          The public landing page finds this business by its slug (must be exactly{" "}
+          <code className="rounded bg-warm px-1 py-0.5">{DEMO_BUSINESS_SLUG}</code>) and then uses the widget
+          id below — not a secret, but you don&apos;t need to configure either value anywhere yourself.
         </p>
-        <p className="mt-2 select-all rounded-lg bg-warm px-3 py-2 font-mono text-xs text-navy">
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-navy/60">Slug:</span>
+          <code
+            className={cn(
+              "rounded px-2 py-0.5 font-mono text-xs",
+              slugLooksRight ? "bg-green-50 text-green-800" : "bg-red-50 text-red-700",
+            )}
+          >
+            {business.slug}
+          </code>
+          {!slugLooksRight ? (
+            <span className="text-xs text-red-700">
+              ≠ &quot;{DEMO_BUSINESS_SLUG}&quot; — the public chat widget won&apos;t find this business.
+            </span>
+          ) : null}
+        </div>
+
+        <p className="mt-3 select-all rounded-lg bg-warm px-3 py-2 font-mono text-xs text-navy">
           {business.public_widget_id}
         </p>
+
+        {!slugLooksRight || !business.is_active || (widgetSettings && !widgetSettings.mock_ai_enabled) ? (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={handleRepair}
+              disabled={isRepairing}
+              className="rounded-full bg-adriatic px-4 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {isRepairing ? "Repairing…" : "Repair widget setup"}
+            </button>
+            <p className="mt-1.5 text-xs text-navy/45">
+              Fixes the slug, re-activates the business, enables mock AI, and seeds any missing knowledge —
+              safe to run any time.
+            </p>
+          </div>
+        ) : null}
+
+        {repairMessage ? (
+          <p className={cn("mt-3 text-xs", repairMessage.ok ? "text-green-700" : "text-red-700")}>
+            {repairMessage.text}
+          </p>
+        ) : null}
       </Card>
 
       <Card className="divide-y divide-navy/5 p-0">
