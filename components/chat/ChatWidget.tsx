@@ -163,22 +163,30 @@ export function ChatWidget({ publicWidgetId }: ChatWidgetProps) {
     }
   }, [isOpen]);
 
-  const handleOpenRef = useRef(handleOpen);
+  const ensureConversationRef = useRef(ensureConversation);
   const handleSendRef = useRef(handleSend);
   const languageRef = useRef(language);
   useEffect(() => {
-    handleOpenRef.current = handleOpen;
+    ensureConversationRef.current = ensureConversation;
     handleSendRef.current = handleSend;
     languageRef.current = language;
-  }, [handleOpen, handleSend, language]);
+  }, [ensureConversation, handleSend, language]);
 
   useEffect(() => {
     return onOpenChatWidget(({ startBooking }) => {
-      handleOpenRef.current();
+      hasOpenedRef.current = true;
+      setIsOpen(true);
       if (startBooking) {
+        // handleSend awaits ensureConversation() itself, so it alone
+        // establishes the session — calling handleOpen()'s own
+        // ensureConversation() here too would race two concurrent
+        // session-creation requests (that's what the old fixed 150ms
+        // delay was papering over).
         const lang = languageRef.current;
         const availabilityPrompt = SUGGESTED_QUESTIONS[lang][SUGGESTED_QUESTIONS[lang].length - 1];
-        window.setTimeout(() => handleSendRef.current(availabilityPrompt), 150);
+        void handleSendRef.current(availabilityPrompt);
+      } else {
+        void ensureConversationRef.current();
       }
     });
   }, []);

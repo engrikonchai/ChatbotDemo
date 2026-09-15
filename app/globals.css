@@ -25,6 +25,12 @@
 
 html {
   scroll-behavior: smooth;
+  /* Horizontal-scroll guard lives on html, not body. iOS Safari treats an
+     overflow-clipped body as the containing block for position:fixed
+     descendants, which mispositions the fixed chat widget off-screen —
+     the exact cause of "Check availability" appearing to do nothing on
+     mobile Safari even though the click/tap handler ran correctly. */
+  overflow-x: hidden;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -46,7 +52,6 @@ body {
   color: var(--color-navy);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  overflow-x: hidden;
 }
 
 /* Visible, consistent focus states everywhere (WCAG 2.4.7). */
