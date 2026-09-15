@@ -42,6 +42,7 @@ export function ChatWindow({
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const hasFocusedRef = useRef(false);
   const text = WIDGET_TEXT[language];
 
   useEffect(() => {
@@ -49,10 +50,15 @@ export function ChatWindow({
   }, [messages, isLoading]);
 
   useEffect(() => {
-    if (mode === "dialog") {
-      inputRef.current?.focus();
-    }
-  }, [mode]);
+    // A disabled input can't receive focus, and the widget often opens
+    // with isLoading already true (e.g. the "Check availability" CTA
+    // starts a booking message immediately) — so this can't be a
+    // mount-only effect. It re-checks whenever isLoading changes and
+    // focuses exactly once, the first moment the input is enabled.
+    if (mode !== "dialog" || isLoading || hasFocusedRef.current) return;
+    inputRef.current?.focus();
+    hasFocusedRef.current = true;
+  }, [mode, isLoading]);
 
   function submit(e?: FormEvent) {
     e?.preventDefault();
