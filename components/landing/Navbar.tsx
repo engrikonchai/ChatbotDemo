@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Menu, Waves, X } from "lucide-react";
 import { Container } from "@/components/ui/Container";
-import { openChatWidget } from "@/lib/chat/widget-events";
+import { openNewWidget } from "@/lib/widget/open-new-widget";
 
 const NAV_LINKS = [
   { href: "#overview", label: "Overview" },
@@ -42,7 +42,7 @@ export function Navbar() {
         <div className="hidden md:block">
           <button
             type="button"
-            onClick={() => openChatWidget({ startBooking: true })}
+            onClick={() => openNewWidget()}
             className="rounded-full bg-adriatic px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-adriatic-dark"
           >
             Check availability
@@ -78,7 +78,7 @@ export function Navbar() {
               type="button"
               onClick={() => {
                 setOpen(false);
-                openChatWidget({ startBooking: true });
+                openNewWidget();
               }}
               className="mt-2 rounded-full bg-adriatic px-5 py-2.5 text-sm font-semibold text-white"
             >
