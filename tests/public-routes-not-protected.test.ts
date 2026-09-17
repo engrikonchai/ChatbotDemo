@@ -52,8 +52,13 @@ describe("app/page.tsx — the public homepage", () => {
     expect(pageSource).not.toMatch(/auth\.getSession\(\)/);
   });
 
-  it("resolves the widget id via the service-role admin client, not a per-owner session", () => {
-    expect(pageSource).toMatch(/createSupabaseAdminClient/);
+  it("never depends on a per-owner cookie session client for its own rendering", () => {
+    // The homepage no longer resolves anything via Supabase itself (the
+    // old in-house widget's server-side lookup was disabled in favor of
+    // the ai-receptionist-platform script — see components/chat/ChatWidget.tsx
+    // and tests/widget-migration.test.ts). If that ever comes back, it
+    // must keep using the service-role admin client, never a per-owner
+    // session client whose behavior would depend on who's logged in.
     expect(pageSource).not.toMatch(/createSupabaseServerClient/);
   });
 });

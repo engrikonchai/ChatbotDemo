@@ -4,7 +4,7 @@ import { MapPin, ShieldCheck, Waves } from "lucide-react";
 import { Container } from "@/components/ui/Container";
 import { ImageWithFallback } from "@/components/ui/ImageWithFallback";
 import { Badge } from "@/components/ui/Badge";
-import { openChatWidget } from "@/lib/chat/widget-events";
+import { openNewWidget } from "@/lib/widget/open-new-widget";
 import { APARTMENT_INFO } from "@/lib/chat/knowledge";
 
 const FACTS = [
@@ -35,7 +35,7 @@ export function Hero() {
           <div className="mt-6 flex flex-col gap-3 sm:mt-8 sm:flex-row sm:items-center">
             <button
               type="button"
-              onClick={() => openChatWidget({ startBooking: true })}
+              onClick={() => openNewWidget()}
               className="inline-flex items-center justify-center rounded-full bg-adriatic px-7 py-3 text-base font-semibold text-white shadow-md transition-transform hover:-translate-y-0.5 hover:bg-adriatic-dark sm:py-3.5"
             >
               Check availability
